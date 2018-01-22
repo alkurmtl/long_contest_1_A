@@ -1,177 +1,210 @@
 #include <iostream>
+#include <type_traits>
 #include <utility>
 
 class List {
+    friend List merge_sort(List& list);
+    class Node;
+    template <bool Const>
+    class IteratorTemplate;
 public:
+    using Iterator = IteratorTemplate<false>;
+    using ConstIterator = IteratorTemplate<true>;
+
+    List() : head_(nullptr), tail_(nullptr), size_(0) {}
+
+    friend void swap(List& lhs, List& rhs) {
+        std::swap(lhs.head_, rhs.head_);
+        std::swap(lhs.tail_, rhs.tail_);
+        std::swap(lhs.size_, rhs.size_);
+    }
+
+    List(const List& other) : List() {
+        for (int x : other) {
+            push_back(x);
+        }
+    }
+
+    List(List&& other) noexcept {
+        head_ = other.head_;
+        tail_ = other.tail_;
+        size_ = other.size_;
+        other.head_ = nullptr;
+        other.tail_ = nullptr;
+        other.size_ = 0;
+    }
+
+    List& operator=(List other) {
+        if (head_ != other.head_) {
+            clear();
+        }
+        swap(*this, other);
+        other.head_ = nullptr;
+        return *this;
+    }
+
+    int size() const {
+        return size_;
+    }
+
+    Iterator begin() {
+        return Iterator(head_);
+    }
+
+    Iterator end() {
+        return Iterator(nullptr);
+    }
+
+    ConstIterator begin() const {
+        return ConstIterator(head_);
+    }
+
+    ConstIterator end() const {
+        return ConstIterator(nullptr);
+    }
+
+    void push_back(int x) {
+        push_back_node(new Node(x));
+    }
+
+    std::pair<List, List> split(int partSize) {
+        std::pair<List, List> res;
+        Node* node = head_;
+        int i = 0;
+        while (node != nullptr) {
+            if (i < partSize) {
+                res.first.push_back_node(node);
+            } else {
+                res.second.push_back_node(node);
+            }
+            if (i == partSize - 1) {
+                Node* temp = node->next;
+                node->next = nullptr;
+                node = temp;
+            } else {
+                node = node->next;
+            }
+            ++i;
+        }
+        return std::move(res);
+    };
+
+    List mergeWith(List& other) {
+        List res;
+        Node* nodeThis = head_;
+        Node* nodeOther = other.head_;
+        while (nodeThis != nullptr || nodeOther != nullptr) {
+            if (nodeThis != nullptr && (nodeOther == nullptr || nodeThis->val < nodeOther->val)) {
+                res.push_back_node(nodeThis);
+                nodeThis = nodeThis->next;
+            } else {
+                res.push_back_node(nodeOther);
+                nodeOther = nodeOther->next;
+            }
+        }
+        return std::move(res);
+    }
+
+    void clear() {
+        if (head_ == nullptr) {
+            return;
+        }
+        Node* node = head_;
+        Node* nextNode = node->next;
+        while (node != nullptr) {
+            delete(node);
+            node = nextNode;
+            if (node != nullptr) {
+                nextNode = node->next;
+            }
+        }
+        head_ = nullptr;
+        tail_ = nullptr;
+        size_= 0;
+    }
+
+    ~List() {
+        clear();
+    }
+
+private:
     class Node {
+        friend class List;
+
     private:
         Node* next;
         int val;
-        friend class List;
 
     public:
         Node(int x) : next(nullptr), val(x) {}
     };
 
-private:
-    Node* head;
-    Node* tail;
-    int sz;
-
-public:
-    class Iterator {
+    template <bool Const>
+    class IteratorTemplate {
     private:
-        Node* cur;
+        using NodeType = typename std::conditional<Const, const Node*, Node*>::type;
+        NodeType node_;
 
     public:
-        Iterator(Node* cur) : cur(cur) {}
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = int;
+        using reference = typename std::conditional<Const, const int&, int&>::type;
+        using pointer  = typename std::conditional<Const, const int*, int*>::type;
+        using difference_type = std::ptrdiff_t;
 
-        Iterator& operator++() {
-            cur = cur->next;
+        IteratorTemplate(NodeType node) : node_(node) {}
+
+        IteratorTemplate& operator++() {
+            node_ = node_->next;
             return *this;
         }
 
-        Iterator operator++(int) {
-            Iterator t = *this;
+        IteratorTemplate operator++(int) {
+            IteratorTemplate t = *this;
             ++(*this);
             return t;
         }
 
-        bool operator==(Iterator& arg) const {
-            return cur == arg.cur;
+        bool operator==(const IteratorTemplate& other) const {
+            return node_ == other.node_;
         }
 
-        bool operator!=(Iterator& arg) const {
-            return !(*this == arg);
+        bool operator!=(const IteratorTemplate& other) const {
+            return !(*this == other);
         }
 
-        int& operator*() const {
-            return cur->val;
+        reference operator*() const {
+            return node_->val;
         }
     };
 
-    List() : head(nullptr), tail(nullptr), sz(0) {}
-
-    List(const List& arg) {
-        head = nullptr;
-        tail = nullptr;
-        sz = 0;
-        Node* cur = arg.head;
-        while (cur != nullptr) {
-            push_back(cur);
-            cur = cur->next;
-        }
-    }
-
-    List& operator=(const List& arg) {
-        head = nullptr;
-        tail = nullptr;
-        sz = 0;
-        Node* cur = arg.head;
-        while (cur != nullptr) {
-            push_back(cur);
-            cur = cur->next;
-        }
-    }
-
-    int size() const {
-        return sz;
-    }
-
-    Iterator begin() const {
-        return Iterator(head);
-    }
-
-    Iterator end() const {
-        return Iterator(nullptr);
-    }
-
-    void push_back(Node* x) {
+    void push_back_node(Node* x) {
         if (size() == 0) {
-            head = tail = x;
+            head_ = tail_ = x;
         } else {
-            tail->next = x;
-            tail = x;
+            tail_->next = x;
+            tail_ = x;
         }
-        ++sz;
+        ++size_;
     }
 
-    std::pair<List, List> split(int k) {
-        std::pair<List, List> res;
-        Node* cur = head;
-        int i = 0;
-        while (cur != nullptr) {
-            if (i < k) {
-                res.first.push_back(cur);
-            } else {
-                res.second.push_back(cur);
-            }
-            if (i == k - 1) {
-                Node* temp = cur->next;
-                cur->next = nullptr;
-                cur = temp;
-            } else {
-                cur = cur->next;
-            }
-            ++i;
-        }
-        return res;
-    };
-
-    List merge(List arg) {
-        List res;
-        Node* cur1 = head;
-        Node* cur2 = arg.head;
-        while (cur1 != nullptr && cur2 != nullptr) {
-            if (cur1->val < cur2->val) {
-                res.push_back(cur1);
-                cur1 = cur1->next;
-            } else {
-                res.push_back(cur2);
-                cur2 = cur2->next;
-            }
-        }
-        if (cur1 == nullptr) {
-            while (cur2 != nullptr) {
-                res.push_back(cur2);
-                cur2 = cur2->next;
-            }
-        } else if (cur2 == nullptr) {
-            while (cur1 != nullptr) {
-                res.push_back(cur1);
-                cur1 = cur1->next;
-            }
-        }
-        return res;
-    }
-
-    void clear() {
-        if (head == nullptr) {
-            return;
-        }
-        Node* cur = head;
-        Node* next = cur->next;
-        while (true) {
-            delete(cur);
-            cur = next;
-            if (cur == nullptr) {
-                break;
-            }
-            next = cur->next;
-        }
-    }
+    Node* head_;
+    Node* tail_;
+    int size_;
 };
 
-List merge_sort(List list) {
+List merge_sort(List& list) {
     if (list.size() < 2) {
-        return list;
-    } else {
-        std::pair<List, List> to_sort = list.split(list.size() / 2);
-        to_sort.first = merge_sort(to_sort.first);
-        to_sort.second = merge_sort(to_sort.second);
-        List res = to_sort.first.merge(to_sort.second);
-        return res;
+        return std::move(list);
     }
+    std::pair<List, List> to_sort = list.split(list.size() / 2);
+    to_sort.first = merge_sort(to_sort.first);
+    to_sort.second = merge_sort(to_sort.second);
+    List res = to_sort.first.mergeWith(to_sort.second);
+    to_sort.first.head_ = nullptr;
+    to_sort.second.head_ = nullptr;
+    list.head_ = nullptr;
+    return std::move(res);
 }
 
 int main() {
@@ -183,11 +216,10 @@ int main() {
     int x;
     for (int i = 0; i < n; ++i) {
         std::cin >> x;
-        list.push_back(new List::Node(x));
+        list.push_back(x);
     }
     List res = merge_sort(list);
-    for (int x : res) {
-        std::cout << x << ' ';
+    for (int i : res) {
+        std::cout << i << ' ';
     }
-    res.clear();
 }
